@@ -1,0 +1,1318 @@
+---
+title: 'Proyecto de estudio de la salud mental por paises'
+author: "Autor: Álvaro Sánchez"
+date: "Junio 2024"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+if (!require('corrplot')) install.packages('corrplot'); library('corrplot')
+```
+
+# INFORMACION DEL DATASET
+
+------------------------------------------------------------------------
+
+## 1. Presentacion del dataset
+
+¿Por que hemos cogido el dataset? ¿Que pretendemos extraer de este dataset? (objetivo) ¿Como vamos a conseguir este objetivo (Pasos para llegar al objetivo)?
+
+El dataset seleccionado reviste una gran importancia en la actualidad, especialmente dado el preocupante aumento en el número de suicidios. Aunque el dataset no incluye datos de años recientes, nos permite visualizar y entender si este incremento incipiente tiene raíces en años anteriores. Por lo tanto, el objetivo del estudio es comprender las causas o detonantes que contribuyen a este aumento significativo.
+
+El dataset fue extraído del siguiente enlace: [Dataset](https://www.kaggle.com/datasets/russellyates88/suicide-rates-overview-1985-to-2016 "Dataset Suicidios")
+
+Para llevar a cabo este estudio, comenzaremos con un análisis exploratorio para comprender el significado de las diferentes variables y revisar los registros contenidos en ellas para su posterior limpieza. Una vez entendidos los significados y limpiadas las variables, realizaremos una serie de visualizaciones para comprender las relaciones entre las diferentes variables. Esto nos permitirá dirigir el estudio hacia la aplicación de un modelo de análisis de componentes principales (PCA), donde podremos reducir las variables del dataset con el objetivo de realizar operaciones con mayor eficiencia. Al hacerlo, contaremos con aquellas variables (componentes principales) que explican la mayoría de la variabilidad de los datos. Antes de realizar este análisis, también necesitamos entender si las variables tienen dependencias entre sí.
+
+Una vez completados estos pasos, procederemos a discretizar las variables para centrarnos en el análisis de PCA. Usaremos el método SVD, del cual explicaremos su funcionamiento más adelante.
+
+Una vez obtenido el resultado esperado, habremos elaborado un dataframe que contendrá las componentes principales fundamentales para explicar el 90% de los datos. Este dataframe podrá ser utilizado más adelante en el proyecto para evaluar las tendencias de la población en relación al número de suicidios, con el objetivo de prevenir o mitigar este grave problema que afecta a la sociedad actual.
+
+## 2. Análisis exploratorio
+
+Para comenzar a trabajar con el conjunto de datos, es fundamental comprender los tipos de valores contenidos en él y qué representa cada campo en el mundo real. Esta comprensión nos permitirá determinar qué datos son relevantes para nuestro estudio y cómo debemos abordar su análisis.
+
+```{r, echo = TRUE}
+# Establecemos el directorio
+setwd("[direccion]")
+# Leemos el dataset
+df <- read.csv("./data/master.csv")
+# Imprimimos estructura del mismo
+str(df)
+```
+
+Como podemos observar, actualmente tenemos un conjunto de datos con 27,820 observaciones, representadas en 12 campos. A continuación, explicaremos cada uno de estos campos para comprender mejor los análisis que realizaremos:
+
+1.  **country**: Contiene valores de tipo **`chr`** (caracter/cadena) que representan el país del registro.
+
+2.  **year**: Representa los años en los que se tomó el registro, representado como tipo **`int`** (entero).
+
+3.  **sex**: Es un campo de tipo **`chr`**, similar al de **`country`**, pero aquí se almacena el género del registro. Este valor solo puede contener dos opciones: "male" (hombre) o "female" (mujer), es decir, es un campo binario (0,1).
+
+4.  **age**: Contiene el intervalo de edades del registro, representado como tipo **`chr`**.
+
+5.  **suicides_no**: Representa el número total de suicidios en el registro, representado como tipo **`int`**.
+
+6.  **population**: Representa la población en el registro, representada como tipo **`int`**.
+
+7.  **suicides/100k pop**: Contiene el ratio por cada 100,000 habitantes de suicidios. Este se calcula mediante la fórmula: $$ratio=(\frac{suicides\_no}{population})100,000$$. Este valor se representa como tipo **`num`** (número con decimales).
+
+8.  **country.year**: Contiene de forma concatenada los valores del país y el año, representados de la siguiente forma: "Albania1987". El tipo de datos de estos valores es **`chr`**.
+
+9.  **HDI for year**: Representa el valor conocido como Índice de Desarrollo Humano (IDH) por año en el registro. Este se obtiene mediante otros indicadores no representados en esta tabla, y su tipo de datos es **`num`**.
+
+10. **gdp_for_year (\$)**: Contiene el valor conocido como Producto Interno Bruto (PIB) por año en el registro, representado como tipo **`chr`**, como podemos observar este campo que deberia ser númerico viene representado como chr por lo que vamos a cambiarlo para poder trabajar con el correctamente.
+
+11. **gdp_per_capita** **(\$)**: Representa el valor que evalúa el nivel de riqueza del país por población, la fórmula para calcular este es la siguiente: $$\frac{gdp\_per\_year}{population}$$ . Este valor ser representa como tipo **`int`** .
+
+12. **generation**: Este valor representa la generación a la que pertenece el registro, es decir, la generación de nacimiento. Su tipo de datos es **`chr`**.
+
+Una vez que hemos definido el significado de los campos en el conjunto de datos, vamos a realizar una visualización de unas pocas líneas para corroborar lo mencionado anteriormente.
+
+```{r, echo = TRUE}
+# Mostramos 6 primeras lineas del dataset
+head(df, n = 6)
+```
+
+Como podemos observar a simple vista, lo mencionado anteriormente coincide con los registros almacenados en este conjunto de datos. Sin embargo, también notamos que el campo "HDI.for.year" contiene muchos valores nulos. Por lo tanto, vamos a verificar si este es un caso único o si ocurre de manera similar en muchos otros campos. Además, vamos a verificar la cantidad de valores nulos que contiene cada uno de los campos en caso de que los haya.
+
+```{r, echo = TRUE}
+# Mostramos el numero de valores nulos en cada columna
+colSums(is.na(df))
+```
+
+Podemos observar a partir de la función ejecutada en R que no contamos con valores nulos en el resto de los campos, excepto en el caso del campo "HDI.for.year", el cual contiene 19,456 valores nulos de un total de 27,820 registros. Esta cifra representa una proporción significativa de los registros en los que este campo se presenta como nulo. Por lo tanto, podríamos considerar la posibilidad de eliminar este campo, ya que no contiene un valor sustancial representativo para integrarlo en el estudio que vamos a realizar.
+
+Una vez identificados los campos nulos, procederemos a visualizar los datos más representativos de cada uno de ellos.
+
+```{r, echo = TRUE}
+# Transformamos el campo gdp_for_year a double
+df$gdp_for_year.... <- gsub(",","",df$gdp_for_year....)
+df$gdp_for_year.... <-  as.double(df$gdp_for_year....)
+# Mostramos los valores representativos de las variables
+summary(df)
+```
+
+Ahora vamos a analizar los valores más representativos de cada campo, excluyendo aquellos campos que son de tipo cadena (**`chr`**), ya que solo se nos muestra el número de registros.
+
+1.  **year**: Podemos observar que el valor mínimo de este campo es 1985 y el valor máximo es 2016, lo que indica que los registros abarcan desde 1985 hasta 2016. En cuanto al resto de valores, carecen de importancia, ya que simplemente determinan el año intermedio o cómo dividimos los años. La información importante que extraemos de aquí es el período en el que está datado este dataset.
+
+2.  **suicides_no**: Respecto al número de suicidios, vemos que el máximo es de 22338 y el mínimo es 0. La media de esta variable es de 242 y la mediana está en 25. Esto nos indica que el 50% de los valores están por debajo de 25 y el 50% están por encima. Esto sugiere que hay una segmentación, donde los países con menores datos de suicidios no superan los 25, mientras que los demás países superan ampliamente este número, debido a la media de 242.
+
+3.  **population**: En cuanto a la población, observamos un mínimo de 278 y un máximo de 43,805,214. Esto indica que se están recogiendo un amplio espectro de países, desde aquellos con macropoblaciones hasta los muy poco poblados. La media se sitúa en 1,844,794 y la mediana en 430,150. Podemos indicar que hay un 50% de registros que no superan el millón de habitantes y otro 50% que sobrepasa ampliamente este número. Esto puede ser consecuencia de países superpoblados, como EE. UU., India o China, así como de la evolución de la población a lo largo de los años.
+
+4.  **suicides.100k.pop**: En este campo, vemos que el ratio mínimo de suicidios es 0 y el máximo es 224.97 por cada 100,000 habitantes. La media se sitúa en 12.82 y la mediana en 5.99. Como podemos ver igual que en el valor suicides_no existe un valor extremo como es aproximadamente 225 suicidios cada 100,000 habitantes.
+
+5.  **HDI.for.year**: Aunque muchos de los valores de este campo son nulos, observamos que el mínimo es 0.483 y el máximo es 0.944. El valor máximo de esta característica en países es 1, lo que indica que ninguno de los países reflejados en este dataframe alcanza este valor. La media se establece en 0.777 y la mediana en 0.779.
+
+6.  **gdp_for_year**: En este campo, correspondiente al PIB por año de registro, tenemos un mínimo de 4.692e+07 y un máximo de 1.812e+13. La media se sitúa en 4.456e+11 y la mediana en 4.811e+10. En este caso, la mediana está indicada en un valor muy alto, casi similar al valor de la media, lo que sugiere que en este caso, el valor del PIB de los registros es muy alto.
+
+7.  **gdp_per_capita**: En este último campo, que representa el PIB entre la población del registro, tenemos un mínimo de 251 y un máximo de 126352. La media se sitúa en 16866 y la mediana en 9372. Existe la posibilidad de que, a lo largo de los registros, la población haya aumentado considerablemente mientras que el PIB no haya seguido el mismo ritmo de crecimiento. También podemos ver que existen algunos registros que podríamos clasificar en dos posibles casos: países con un PIB muy elevado pero que no han experimentado un gran cambio en el número de población, o países cuyo PIB ha seguido o incluso superado el crecimiento de la población a lo largo de los registros.
+
+Visualizando los datos a simple vista, sin investigar más a fondo cada uno de los datos, diría que existen dos posibilidades con el conjunto de datos. Es posible que a lo largo de los años contenidos en los registros, se haya experimentado en cada uno de los países un incremento exponencial de la población. O bien, puede existir una división muy marcada en dos grupos. Por un lado, hay pequeños países con un número de población muy bajo y un PIB también muy bajo. Por otro lado, hay un segmento compuesto por países con un número de población muy alto, y este grupo también presenta un valor muy elevado en cuanto al PIB.
+
+Una vez tenemos una primera toma de contacto con el dataset, vamos a realizar una serie de procesos de limpieza para asi poder visualizar de manera mas optima para luego graficar y ver posibles relaciones entre los datos y posteriormente someter este al modelado.
+
+## 3. Preprocesamiento de datos
+
+He notado algunas inconsistencias o dificultades con los nombres de los campos en el dataset. Para iniciar un análisis más profundo, cambiaré los nombres de los campos a otros más intuitivos y fáciles de trabajar.
+
+```{r, echo = TRUE}
+# Vector con los nuevos nombres de las columnas del dataset
+new_cols <- c("pais","año","genero","edad","numero_suicidios","poblacion","ratio_suicidios_100k","pais.año","HDI.for.year","PIB","PIB_per_capita","generacion")
+
+# Establecemos las nuevas columnas
+names(df) <- new_cols
+
+# Mostramos las primeras lineas del dataset
+head(df)
+```
+
+Una vez que hemos cambiado los nombres de los campos, procederemos a eliminar algunos de ellos que considero que no aportarán valor al estudio. Por ejemplo, el campo HDI.for.year, como observamos anteriormente, contiene principalmente valores nulos. Si este campo tuviera más valores válidos, sería una adición valiosa para nuestro análisis. Otro campo que eliminaremos es 'pais.año', ya que es una concatenación de los campos 'pais' y 'año' y no proporciona información relevante para nuestro estudio.
+
+```{r, echo = TRUE}
+# Cargamos solo las columnas que nos interesan en el dataset
+df <- df[,c("pais","año","genero","edad","numero_suicidios","poblacion","ratio_suicidios_100k","PIB","PIB_per_capita","generacion")]
+
+# Mostramos las 5 primeras lineas del datset con las unicas columnas de interes
+head(df, n = 5)
+```
+
+Una vez que tenemos el dataset con la estructura deseada, vamos a realizar algunas visualizaciones de los datos para determinar qué campos podrían ser de mayor interés para nuestro estudio. Posteriormente, los transformaremos para utilizarlos en técnicas de modelado como el SVD.
+
+En primer lugar vamos a graficar por paises el numero de suicidios por cada año, para visualizar las diferencias en cuanto a este dato por cada pais.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por pais y año
+df_v <- aggregate(numero_suicidios ~ pais + año, data = df, FUN = sum)
+# Graficamos totalidad de suicidios por pais
+ggplot(data=df_v,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "skyblue") + facet_wrap(~pais)
+```
+
+Podemos observar fácilmente que algunos países tienen un número significativamente mayor de suicidios en comparación con otros, lo que afecta a la escala de la gráfica. Los países con los mayores números de suicidios son: Estados Unidos, Federación Rusa y Japón. Es importante destacar que en el caso de la Federación Rusa, se observa un decrecimiento considerable en cuanto al número de suicidios. Además, hay otros países con cifras elevadas, aunque no tan extremas como los mencionados anteriormente, como la República de Corea, México, Brasil, Francia, Alemania, Sri Lanka y Ucrania. En el caso de Ucrania, se observa una disminución en el número de suicidios, mientras que en los demás países, excepto Francia y Alemania, la tendencia es de aumento o se mantiene constante.
+
+Ahora, vamos a analizar estos mismos números, pero vamos a desglosarlos por género. Queremos verificar si existe una diferencia en el número de suicidios entre los géneros dentro de cada país, o si hay alguna tendencia general en todos los países en términos de género y situación física que pueda influir en el número de suicidios.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por pais,año y genero
+df_v <- aggregate(numero_suicidios ~ pais + año + genero, data = df, FUN = sum)
+# Seleccionamos solo los hombres
+df_vm <- subset(df_v, genero == "male")
+# Graficamos hombres
+ggplot(data=df_vm,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "skyblue") + facet_wrap(~pais)
+```
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por pais,año y genero
+df_v <- aggregate(numero_suicidios ~ pais + año + genero, data = df, FUN = sum)
+# Seleccionamos solo las mujeres
+df_vf <- subset(df_v, genero == "female")
+# Graficamos mujeres
+ggplot(data=df_vf,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "pink") + facet_wrap(~pais)
+```
+
+\
+A simple vista, notamos que los valores de las gráficas han cambiado. Ahora, la gráfica de suicidios en el género "female" muestra valores entre 0 y 9000, mientras que en el caso de los hombres sigue manteniéndose entre 0 y 50000, como cuando realizamos el análisis con el total de suicidios por país. Esto sugiere que la mayoría de los suicidios en cada uno de los países corresponden al género "male". Sin embargo, continuaremos con el análisis para diferenciar los géneros y estudiar el comportamiento de cada uno de ellos.
+
+En primer lugar, vamos a analizar aquellos países que tienen la mayoría de los suicidios, como mencionamos anteriormente, ya que esto podría proporcionarnos mucha información sobre el objeto de estudio:
+
+-   **Estados Unidos**: Observamos que para ambos géneros, las cifras han ido en aumento con el paso de los años. Hubo una estabilidad desde 1990 hasta 2000, pero a partir de entonces, hasta 2016, ha habido un aumento lineal para ambos géneros. Al comparar estos datos con otros países, vemos que Estados Unidos se sitúa en un punto intermedio en cuanto a suicidios masculinos, mientras que en el género "female" ha alcanzado cifras comparables con el máximo en 2016.
+
+-   **Japón**: Las cifras de suicidios en Japón también son más altas en el género "male", pero han experimentado cambios abruptos. En el año 2000, hubo un aumento muy significativo de suicidios en ambos géneros. Similar a Estados Unidos, en el género "female", se mantiene en niveles elevados en comparación con los máximos representados en la gráfica, mientras que en el género masculino ha mantenido una tendencia más constante en el punto medio de la tabla.
+
+-   **Federación Rusa**: En este país, vemos una tendencia muy elevada de suicidios, pero ha experimentado una notable mejoría. A partir de aproximadamente 1990, ha habido una disminución lineal de los suicidios en comparación con los años anteriores a 1990.
+
+También notamos que hay otros países como la **República de Corea, Ucrania, Francia y Alemania** que experimentan altos niveles de suicidios en comparación con el resto de Europa. En cuanto a las visualizaciones de datos, cabe destacar que la mayoría de los suicidios por país son principalmente en el género "male", donde las escalas de estos (0-50,000) son mucho mayores que para "female" (0-9,000). Además, observamos que, a medida que cambian los niveles de suicidio en el género "female", también lo hacen en el género "male", lo que sugiere una posible dependencia entre estas dos variables con otra variable independiente.
+
+Ahora vamos a visualizar estos mismos datos, pero vamos a incluir la variable de edad, la cual puede ser de interés para comprender si existe algún factor detonante en cuanto al suicidio, como podría ser la edad.
+
+```{r, echo = TRUE}
+# Agrupamos por edad y año
+df_v <- aggregate(numero_suicidios ~ edad + año, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~edad)
+```
+
+Como podemos observar en este gráfico de un vistazo, la mayoría de los casos de suicidio se encuentran en los rangos de edad de 35 a 54 años y de 55 a 74 años, siendo el pico más pronunciado en el rango de 35 a 54 años. Notamos que todos los rangos de edad están representados en la misma escala, excepto el rango de 5 a 14 años. También se observa un pico en estos rangos de edad en el año 2000, pero este se refleja más notablemente en el grupo de 35 a 54 años. Además, podemos ver que en el resto de los grupos de edad, la tendencia es bastante constante, excepto en el grupo de 55 a 74 años, donde hay un ligero aumento, aunque no tan marcado como en el rango de 35 a 54 años.
+
+Ahora vamos a realizar este mismo analisis pero teniendo en cuenta el genero para comprender si existe una diferenciacion con esta variable o se comportan de la misma manera para los 2 valores.
+
+```{r, echo = TRUE}
+# Agrupamos por edad, año y genero
+df_v <- aggregate(numero_suicidios ~ edad + año + genero, data = df, FUN = sum)
+# Seleccionamos el genero "male"
+df_vm <- subset(df_v, genero == "male")
+# Graficamos hombres
+ggplot(data=df_vm,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "blue") + facet_wrap(~edad)
+```
+
+```{r, echo = TRUE}
+# Agrupamos por edad,año y genero
+df_v <- aggregate(numero_suicidios ~ edad + año + genero, data = df, FUN = sum)
+# Seleccionamos el genero "female"
+df_vf <- subset(df_v, genero == "female")
+# Graficamos mujeres
+ggplot(data=df_vf,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "red") + facet_wrap(~edad)
+```
+
+Podemos observar que se repite un patrón similar al análisis realizado previamente con respecto a los países y el género. Las escalas para el género "female" son menores que para el género "male". Además, los rangos de edad se comportan de manera similar, excepto en el caso del grupo de edad de 55 a 74 años, donde los valores para el género "female" son mayores en su escala que en el caso del género "male". Es decir, en el grupo "female" hay un número aproximadamente similar de suicidios en los rangos de edad de 35 a 54 y de 55 a 74, mientras que en el caso del género "male", estos rangos mencionados son más dispares. También observamos una tendencia similar, aunque en menor medida, en el rango de edad de 74 años en adelante, donde, en comparación con los intervalos de edad "male", hay más suicidios en el género "female".
+
+De esta visualización podemos inferir que tanto en el género "male" como en el "female", la mayoría de los suicidios se concentran en el intervalo de edad de 35 a 54 años. Además, observamos un número elevado en el intervalo de edad de 55 a 74 años, siendo este más similar al rango anteriormente mencionado en el caso del género "female". También se destaca que hay un mayor número de suicidios en el grupo "female" para el rango de edad de 75 años en adelante en comparación con el género "male".
+
+Para la siguiente visualizacion de la misma forma que hemos hecho con el genero, quiero ver si existe algun otra dependencia o patron pero con el factor de los paises.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por edad y pais
+df_v <- aggregate(numero_suicidios ~ edad + pais, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = edad, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~pais) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+Como podemos observar en la gráfica, la mayoría de los países muestran un patrón similar al intervalo mencionado en la visualización anterior. Es decir, el mayor número de suicidios se encuentra en el rango de 35 a 54 años. Sin embargo, algunos países como Estados Unidos, Japón y la Federación Rusa presentan un patrón diferente, con un mayor número de suicidios en el intervalo de 55 a 74 años. Por otro lado, el intervalo de 5 a 14 años muestra el menor número de suicidios.
+
+Dado que observamos discrepancias en las gráficas con respecto a estos tres países mencionados anteriormente, vamos a construir un nuevo gráfico de suicidios que incluya países con cifras más bajas de suicidios. Es importante considerar estos países para un análisis completo de los datos.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Quitamos paises extremos
+df_s <- subset(df, !(pais %in% c("United States","Japan","Russian Federation")))
+# Agrupamos por pais y año
+df_v <- aggregate(numero_suicidios ~ año + pais, data = df_s, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~pais)
+```
+
+Podemos observar en el gráfico que hay países para los cuales no disponemos de datos sobre el número de suicidios en diferentes años, como es el caso de San Marino, Turquía, Qatar y Nicaragua, entre otros. Por otro lado, podemos analizar el comportamiento de otros países en cuanto al número de suicidios. Brasil y México muestran un aumento lineal en el número de suicidios a lo largo del tiempo, mientras que la República de Corea experimenta un incremento exponencial. Por otro lado, países como Ucrania han experimentado un aumento exponencial seguido de un descenso considerable desde el año 2000 en adelante. También podemos observar que países como Francia y Alemania, aunque mantienen cifras elevadas, muestran un descenso en el número de suicidios, aunque en menor medida.
+
+Como hemos observado en las últimas visualizaciones, existe una relación entre el género, el país y los grupos de edad en relación con el número de suicidios. Me gustaría explorar si el país podría ser una variable dependiente de otras variables independientes, como el PIB o la población. Por ejemplo, es probable que países como Estados Unidos tengan un PIB más alto y una población más grande en comparación con muchos de los países incluidos en el conjunto de datos. Por lo tanto, aunque Estados Unidos pueda mostrar datos muy elevados en términos de suicidios, esto también podría deberse a su mayor población, lo que potencialmente afectaría a estos números. Además, otro factor a considerar podría ser el PIB, ya que podría influir en el nivel de estrés de la población debido a las exigencias laborales y al rendimiento en el trabajo. Para comenzar, realizaremos un análisis para determinar si el PIB tiene una repercusión en el número de suicidios y también graficaremos los datos en relación con la población.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por PIB y año
+df_v <- aggregate(numero_suicidios ~ PIB + año, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = PIB, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~año) + geom_smooth(method = lm,color = "firebrick")
+```
+
+Como podemos observar en la gráfica, existe una relación entre el PIB y el número de suicidios con una tendencia lineal. Cada vez que aumenta el PIB, también lo hace el número de suicidios. Esto podría deberse a que los países con un PIB más alto tienden a tener trabajos más estresantes o mayores demandas laborales, lo que puede aumentar la incidencia de suicidios.
+
+Ahora vamos a analizar esta misma relación con respecto a la población. Es posible que también exista una tendencia ascendente, ya que un mayor número de personas aumenta las posibilidades de que alguien lleve a cabo un acto de suicidio.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por poblacion y año
+df_v <- aggregate(numero_suicidios ~ poblacion + año, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = poblacion, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~año) + geom_smooth(method = lm,color = "firebrick")
+```
+
+En cuanto a la población, observamos un comportamiento diferente en comparación con la gráfica anterior. Si bien es cierto que el número de suicidios aumenta cuando la población crece, no existe una relación tan directa como en el caso del PIB, donde los suicidios aumentan de manera exponencial a medida que el PIB del país aumenta.
+
+Vamos a visualizar también el PIB per cápita, ya que este valor es el resultado de dividir el PIB entre la población. Esto puede ser muy representativo como una variable independiente que afecta directamente al número de suicidios.
+
+```{r fig.height=20, fig.width=22, echo = TRUE}
+# Agrupamos por PIB per capita y año
+df_v <- aggregate(numero_suicidios ~ PIB_per_capita + año, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = PIB_per_capita, y = numero_suicidios)) +
+  geom_point(color = "firebrick") + facet_wrap(~año) + geom_smooth(method = lm,color = "firebrick")
+```
+
+Como podemos observar en este caso, el aumento del PIB per cápita se presenta de forma constante. A medida que aumenta este indicador, el número de suicidios no aumenta, lo que sugiere que cuando la población es menor pero el PIB per cápita es mayor, el número de suicidios no se incrementa. En otras palabras, cuando la calidad de vida mejora y cada persona de la población contribuye a un alto PIB, el número de suicidios tiende a disminuir o incluso mantenerse constante. Esto sugiere que este indicador para estos casos deja de ser relevante para el estudio, y se deberian analizar otras variables que puedan influir en el número de suicidios.
+
+Ahora vamos a analizar aspectos sociales, como puede ser la generación. Lo que ha experimentado cada una de las generaciones o las influencias que han podido marcar a cada una de ellas pueden ser factores importantes para comprender las razones detrás del número de suicidios.
+
+```{r, echo = TRUE}
+# Agrupamos por generacion y año
+df_v <- aggregate(numero_suicidios ~ generacion + año, data = df, FUN = sum)
+# Graficamos totalidad
+ggplot(data=df_v,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "skyblue") + facet_wrap(~generacion)
+```
+
+A partir del gráfico presentado, podemos extraer cierta información sobre cada una de las generaciones. Observamos que la generación Z presenta el menor número de suicidios. Aunque es cierto que hay muchos valores faltantes antes de aproximadamente 2007, esto puede deberse a que esta generación no se considera en los años anteriores a este punto o porque cae en los intervalos de edad donde los suicidios son poco comunes, como entre los 5 y los 14 años. Por otro lado, la generación que muestra el mayor número de suicidios es la generación de los Boomers, donde a partir de 1990 se alcanzan los picos máximos en la gráfica. Además, las generaciones Silent y X también presentan números elevados, aunque no en la misma medida que los Boomers, y su tendencia es más irregular. En cuanto a los Millenials, observamos un crecimiento en el número de suicidios que luego se estabiliza durante un período de 10 años, pero vuelve a aumentar progresivamente. Sin embargo, es importante destacar que en el año 2016 se produce una disminución drástica.
+
+Dado que no parece haber un patrón regular en los datos observados, vamos a realizar una visualización considerando los distintos géneros, ya que esto puede afectar la representación y no mostrarnos exactamente el comportamiento de las generaciones en relación con el número de suicidios.
+
+```{r, echo = TRUE}
+# Agrupamos por generacion, año y genero
+df_v <- aggregate(numero_suicidios ~ generacion + año + genero, data = df, FUN = sum)
+# Seleccionamos hombres
+df_vm <- subset(df_v, genero == "male")
+# Graficamos hombres
+ggplot(data=df_vm,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "blue") + facet_wrap(~generacion)
+```
+
+```{r, echo = TRUE}
+# Agrupamos por generacion, año y genero
+df_v <- aggregate(numero_suicidios ~ generacion + año + genero, data = df, FUN = sum)
+# Seleccionamos mujeres
+df_vf <- subset(df_v, genero == "female")
+# Graficamos mujeres
+ggplot(data=df_vf,aes(x = año, y = numero_suicidios)) +
+  geom_point(color = "pink") + facet_wrap(~generacion)
+```
+
+Como hemos observado en otros gráficos, existe una gran disparidad en los números de suicidios entre los dos géneros. Los picos en el género "female" sobrepasan ligeramente los 20,000, mientras que en el género "male" pueden superar los 100,000. A pesar de estas diferencias en los números de suicidios, hemos observado en estudios anteriores que el comportamiento de las gráficas es similar en ambos géneros. Esto sugiere que el género no tiene ningún efecto discernible en el patrón de la gráfica, sino que más bien influye significativamente en los números (lo cual es un factor importante).
+
+### Conclusion Análisis
+
+Una vez hemos realizado las visualizaciones pertinentes, podemos inferir varias afirmaciones importantes. Los países ejercen una influencia significativa sobre la variable del número de suicidios, influenciada por diversas características como el gobierno, el territorio o la sociedad. Esto se refleja claramente en casos extremos como los mencionados anteriormente: Estados Unidos, Japón y la Federación Rusa.
+
+Por otro lado, el género también juega un papel crucial, ya que modifica drásticamente las escalas de las estadísticas. Además, el valor del PIB tiene una influencia significativa en la determinación del número de suicidios, al igual que la población, aunque en menor medida. Hemos observado que el PIB per cápita también impacta, mostrando que un mayor PIB distribuido entre la población tiende a correlacionarse con una disminución o estabilización en el número de suicidios. Esto podría estar relacionado con la calidad de vida en el país.
+
+Finalmente, hemos notado una relación entre la edad, la generación y el número de suicidios. La generación Boomer es la más afectada por este problema, al igual que las personas en el intervalo de edad de 35 a 54 años. Estos dos datos pueden estar interrelacionados, ya que los Boomers, al pertenecer a un intervalo de años específico, también podrían estar situados en estos rangos de edad. Esto sugiere una posible relación estrecha entre variables.
+
+### Preprocesamiento de los datos
+
+Vamos a llevar a cabo una serie de modificaciones en el conjunto de datos para poder trabajar con él más adelante utilizando modelos de agrupación. El objetivo es simplificar la matriz para reducir la dimensionalidad y dejar solo un numero de variables que describan las características relacionadas con el número de suicidios. Es decir, queremos identificar si podemos reducir la dimensionalidad de la matriz para asi trabajar con ella de una forma mas eficiente.
+
+Como primera modificación, cambiaremos los valores "male" y "female" a valores numéricos, representados como 1 y 0, respectivamente, para poder trabajar con estos datos, los cuales son de gran importancia para el estudio y el modelado adecuado del conjunto de datos.
+
+```{r, echo = TRUE}
+# Sometemos a funcion factor para incorporar a male o female sus respectivos valores numericos
+df$genero <- factor(df$genero, levels = c("male","female"))
+df$genero <- as.numeric(df$genero)
+# Mostramos las 5 primeras lineas
+head(df, n = 5)
+```
+
+Una vez que hemos discretizado el género, llevaremos a cabo una acción similar con la edad debido a su importancia. Para ello, calcularemos la media dentro de cada intervalo de edades y asignaremos ese valor intermedio a cada uno de los intervalos, permitiéndonos así trabajar con la variable de edad de forma numérica.
+
+```{r, echo = TRUE}
+# Creamos unas lista que contendra clave: "intervalo de edad", valor: media del intervalo
+intervalos <- list()
+# Seleccionamos todos los valores posibles de intervalos
+edades <- unique(df$edad)
+# Iteramos sobre los intervalos y extraemos la media
+for (valor in edades){
+  partes <- strsplit(valor, "-")[[1]]
+  edad_inicial <- as.integer(gsub("\\+ years","",partes[1]))
+  edad_final <- as.integer(gsub(" years","",partes[2]))
+  
+  if(is.na(edad_final)){
+    media_edad <- edad_inicial
+  } else{
+    suma_edades <- sum(edad_inicial:edad_final)
+    total_edades <- edad_final - edad_inicial
+    media_edad <- suma_edades/total_edades
+  }
+  # Una vez conseguida la media asignamos las media a su intervalo
+  intervalos[[valor]] <- as.integer(media_edad)
+}
+# Sustituimos en la variable edad los intervalos por sus medias
+df$edad <- sapply(df$edad, function(edad) intervalos[[edad]])
+# Graficamos las primeras 5 lineas
+head(df, n = 5)
+```
+
+Luego de discretizar la variable de edad, haremos lo mismo con la variable de generación, ya que, como hemos observado, también puede ser relevante para establecer un patrón con respecto al número de suicidios.
+
+```{r, echo = TRUE}
+# Creamos listado de valores unicos de generacion
+generaciones <- unique(df$generacion)
+# Lo transformamos a valores numericos
+df$generacion <- factor(df$generacion, levels = generaciones)
+df$generacion <- as.numeric(df$generacion)
+# Mostramos el dataset
+head(df)
+```
+
+Una vez que hemos discretizado los datos, quiero visualizar una tabla de correlaciones excluyendo en este caso la variable del país, para evaluar cómo se relacionan entre sí las distintas variables sin tener en cuenta esta variable. Después, discretizaremos la variable del país para convertirla en una variable numérica, y volveremos a realizar una tabla de correlaciones. Esto me permitirá determinar con certeza si el país es un factor tan influyente como sospecho.
+
+```{r, echo = TRUE}
+# Seleccionamos todas las variables menos paises
+df_v <- df[, -1]
+# Elaboramos matriz de correlaciones
+res <- cor(df_v)
+# Graficamos matriz de correlaciones
+corrplot(res,method="color",tl.col="black", tl.srt=30, order = "AOE",
+number.cex=0.75,sig.level = 0.01, addCoef.col = "black")
+```
+
+Como podemos ver, existe una relación muy marcada entre el número de suicidios y las variables de población y PIB, tal como mencionamos anteriormente. Lógicamente, también hay una correlación con la tasa de suicidios, ya que esta se deriva del número total de suicidios. Además, observamos una relación, aunque más débil, con el género. Por otro lado, notamos una influencia negativa en cuanto a la generación; como vimos anteriormente, las generaciones más antiguas tienen una incidencia mayor de suicidios, lo que implica que a medida que la generación es más antigua, hay más suicidios. También destacamos la variable del PIB per cápita, que muestra una relación débil; un aumento en este indicador no necesariamente conlleva un incremento en el número de suicidios, sino que puede mantenerse constante. Por último, aunque inicialmente pensamos que la edad tendría un impacto significativo, las visualizaciones anteriores mostraron que el intervalo de 35 a 54 años concentra la mayoría de los suicidios, lo que sugiere que no hay una relación clara entre la edad y el número de suicidios.
+
+Es importante señalar también que existe una relación sólida entre el PIB y la población, donde un aumento en la población conduce a un aumento en el PIB. Esto es lógico, ya que un mayor número de trabajadores generalmente se traduce en un mayor PIB.
+
+Ahora vamos a añadir el factor del país a este estudio, pero primero vamos a discretizar esta variable para poder incorporarla a nuestra gráfica de correlaciones.
+
+```{r, echo = TRUE}
+# Seleccionamos lista de paises unicos en dataset
+paises <- unique(df$pais)
+# Transformamos mediante factor los valores categoricos a numericos
+df$pais <- factor(df$pais, levels = paises)
+df$pais <- as.numeric(df$pais)
+# Mostramos las 5 primeras lineas del nuevo dataset con la columna cambiada
+head(df, n = 5)
+```
+
+Una vez que hemos discretizado la variable del país, elaboraremos una gráfica de correlaciones para entender cómo esta variable afecta a nuestro objeto de estudio, que es el número de suicidios.
+
+```{r, echo = TRUE}
+# Volvemos a crear matriz de correlaciones ahroa con el pais
+res <- cor(df)
+# Graficamos la matriz de correlaciones
+corrplot(res,method="color",tl.col="black", tl.srt=30, order = "AOE",
+number.cex=0.75,sig.level = 0.01, addCoef.col = "black")
+```
+
+Podemos observar que el país también juega un papel importante en cuanto a la variable dependiente, que es el número de suicidios, y se ve afectado con un valor de 0.12. Aunque no es tan alto como en el caso del PIB y la población, es un valor a considerar.
+
+## 4. Aplicacion de modelo SVD
+
+Una vez procesados los datos del conjunto y realizadas visualizaciones para comprenderlo mejor, procedemos a identificar las variables principales de la matriz que nos permitirán reducirla, explicando casi toda la variabilidad de los datos. Esto nos facilitará entender el motivo del número de suicidios.
+
+Para iniciar este análisis, describiremos su base matemática. Este método se fundamenta en la siguiente fórmula:
+
+$$
+A=U\Sigma V^T
+$$
+
+Aquí, la matriz inicial A se descompone en varias matrices más simples:
+
+-   U Es una matriz ortogonal, es decir, $$ U \rightarrow U^TU = UU^T = I (la\ identidad) $$ que contiene los autovectores singulares izquierdos de $AA^T$.
+
+-   $\Sigma$ es una matriz diagonalizada que contiene los autovalores singulares de A.
+
+-   V es otra matriz ortogonal, que también cumple con las propiedades mencionadas, y está compuesta por los autovectores singulares derechos de $A^TA$.
+
+Una vez explicada la construcción de este método, procedemos a aplicarlo a nuestra tabla de datos.
+
+```{r, echo = TRUE}
+# Normalizamos el dataframe
+df_v <- scale(df)
+
+# Calculamos las matrices simples de A mediante la funcion svd
+svd <- svd(df_v)
+
+# Extrameos U
+svd$v
+```
+
+Luego, mediante código en R, extraemos V como la matriz que compone los componentes principales. Esto se debe a que V contiene información sobre la dirección de los vectores de datos, es decir, los vectores que indican hacia qué dirección se mueven los datos, lo que nos ayuda a explicar su variabilidad.
+
+Para demostrar la validez de la técnica utilizada, realizaremos la técnica de PCA y la compararemos con la descrita para verificar si obtenemos el mismo resultado. Como se puede observar en los datos mostrados, ambas matrices de componentes principales son idénticas, lo que indica que, aunque estamos utilizando diferentes métodos, obtenemos las mismas matrices.
+
+```{r, echo = TRUE}
+# Calculamos los componentes principales de la matriz y normalizamos esta
+pca <- prcomp(df, scale = TRUE)
+# Establecemos las diferencias entre las 2 matrices de componentes principales
+dif <- svd$v[,1:10] - pca$rotation[,1:10]
+# Vemos los valores obtenidos
+summary(dif)
+```
+
+Ahora, necesitamos determinar el número de componentes principales que explican la mayoría de la variabilidad de los datos para poder reducir la matriz y trabajar con ella de manera más conveniente. Para ello, calculamos el producto de la matriz $\Sigma$, que contiene los valores singulares, que son la raíz cuadrada de los autovalores de la matriz original.
+
+```{r, echo = TRUE}
+# Calculamos los autovalores
+singular_values <- svd$d^2
+
+# Calculamos el porcentaje de varianza explicada por cada componente
+varianza_explicada <- singular_values / sum(singular_values) * 100
+
+# Graficamos el porcentaje de varianza explicada acumulada
+plot(cumsum(varianza_explicada), xlab = "Número de componentes",
+     ylab = "Porcentaje de varianza explicada",
+     type = "b", pch = 19, col = "blue")
+
+# Numero de componentes para explicar un 90% de la varianza
+num_componentes <- which(cumsum(varianza_explicada) >= 90)[1]
+cat("El numero de componentes principales para representar el 90% es de", num_componentes)
+
+# Numero de componentes para explicar un 90% de la varianza
+num_componentes <- which(cumsum(varianza_explicada) >= 80)[1]
+cat("El numero de componentes principales para representar el 80% es de", num_componentes)
+```
+
+Según avanzamos en el uso de un mayor número de componentes, observamos que explicamos un mayor porcentaje de varianza. A partir de este punto, se debe considerar qué porcentaje de varianza se desea explicar mediante las componentes. En este análisis, se ha seleccionado explicar el 90% de la varianza del conjunto de datos, pero este valor puede ajustarse según los objetivos específicos del estudio. Por ejemplo, podría usarse un 80% si se prefiere una explicación menos detallada de la variabilidad.
+
+## Conclusión:
+
+Una vez concluido el análisis, podemos determinar que todos los factores tienen cierta implicación en el número de suicidios. Algunos de ellos, como el PIB y la población, tienen una influencia significativa en la variable dependiente "numero_suicidios".
+
+En cuanto a la evaluación del análisis de PCA, observamos que podría ser óptimo trabajar con todas las componentes principales, dado que el dataframe no contiene un número elevado de variables. Sin embargo, como hemos observado anteriormente, con 8 componentes principales podemos representar el 90% de la varianza del dataset. Por lo tanto, en caso de que este dataframe fuera utilizado para operaciones computacionalmente costosas, podríamos reducirlo a un total de 5 componentes principales, los cuales representarían el 80% de la varianza del dataframe.
+
+------------------------------------------------------------------------
+
+# CREACION DE MODELO NO SUPERVISADO
+
+------------------------------------------------------------------------
+
+## Generacion de modelo clustering CLARA (distancia euclidea)
+
+Podemos utilizar de 6 a 8 componentes principales, ya que con estas podemos explicar del 80 % al 90 % de la variabilidad de los datos. Dada la importancia de este estudio, como es el caso de la prevención de los índices de suicidio, es recomendable usar un 90 % de explicación de variabilidad; sin embargo, un 80 % también es un muy buen porcentaje de variabilidad explicada. Por lo tanto, usaremos 6 componentes principales para así reducir en gran medida la dimensionalidad de la matriz.
+
+En primer lugar, seleccionaremos un modelo no supervisado de CLARA (Clustering Large Applications) para el ejercicio, ya que está relacionado con las distancias y es adecuado para grandes conjuntos de datos. CLARA trabaja con las distancias de los vectores de los registros para construir clusters, donde cada cluster está formado alrededor de su medoid, agrupando los registros según la distancia euclidea con respecto al medoid creado. Para llevar a cabo el modelo, primero elaboraremos un gráfico de codo, para así determinar cuál es el número óptimo de medoids (agrupaciones) para el dataframe creado previamente.
+
+```{r, echo = TRUE, message = FALSE, warning = FALSE}
+# Importamos las librerias en caso de necesitarlas
+if(!require("stats")){
+  install.packages("stats")
+  library(stats)
+}else{
+  library(stats)
+}
+
+if(!require("cluster")){
+  install.packages("cluster")
+  library(cluster)
+}else{
+  library(cluster)
+}
+
+if(!require("dbscan")){
+  install.packages("dbscan")
+  library(dbscan)
+}else{
+  library(dbscan)
+}
+
+if(!require("dplyr")){
+  install.packages("dplyr")
+  library(dplyr)
+}else{
+  library(dplyr)
+}
+
+if(!require("factoextra")){
+  install.packages("factoextra")
+  library(factoextra)
+}else{
+  library(factoextra)
+}
+
+if(!require("rpart")){
+  install.packages("rpart")
+  library(rpart)
+}else{
+  library(rpart)
+}
+
+if(!require("rpart.plot")){
+  install.packages("rpart.plot")
+  library(rpart.plot)
+}else{
+  library(rpart.plot)
+}
+
+if(!require("caret")){
+  install.packages("caret")
+  library(caret)
+}else{
+  library(caret)
+}
+```
+
+```{r, echo = TRUE, message = FALSE, warning = FALSE}
+# Nos quedamos con las 6 componentes principales
+data <- pca$x[,1:6]
+
+# Definimos el rango de las variables
+centros <- 1:6
+
+# Inicializamos un vector para almacenar suma de las distancias cuadradas
+wss <- numeric(length(centros))
+
+# Iteramos sobre el rango para calcular wss por medoid
+for (k in centros) {
+  set.seed(123)
+  clara_euc <- clara(data, k, metric="euclidean", samples=100)
+  wss[k] <- sum(clara_euc$objective)
+}
+
+# Creamos df relacionando numero de centros a su wss
+codo <- data.frame(k = centros, wss = wss)
+
+# Graficamos para cada valor del numero de medoids
+ggplot(codo, aes(x = k, y = wss)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  ggtitle("Método del Codo") +
+  xlab("Número de Clusters (k)") +
+  ylab("Suma  Distancias Cuadradas Dentro de los Clusters")
+```
+
+Como podemos observar en el gráfico, vemos que con el número de 4 clusters es donde tenemos la inflexión en el valor de la suma de distancias. Usamos esta medida para determinar el número de clusters, ya que determina la distancia entre los puntos y la distancia con el medoid. Al tener valores más pequeños, se demuestra que los grupos son más compactos y distintos entre sí. Podríamos elegir 6 clusters, pero carece de sentido ya que no proporciona una mejora significativa en la compactación de los clusters. Una vez sabemos el número de medoids, ahora vamos a construir nuestro modelo no supervisado, para así elaborar grupos de registros.
+
+```{r, echo = TRUE}
+# Establecemos la semilla de aleatoriedad
+set.seed(123)
+
+# Construimos el modelo clara, 4 centroides, 100 subconjuntos
+clara_euc <- clara(data, 4, metric="euclidean", samples = 100)
+```
+
+Podemos comprobar la calidad del modelo usando la silueta. La silueta nos permite evaluar la calidad de los clusters ya que, mediante la media de los coeficientes de silueta de cada punto (que indica cuán similar es el punto a su propio cluster en comparación con otros clusters), podemos establecer una puntuación para el modelo creado.
+
+```{r, echo = TRUE}
+# Calculamos los coeficientes de silueta de los puntos en sus clusters
+silueta_scores <- silhouette(clara_euc$cluster, dist(data))
+
+# Hacemos una media de los coeficientes de silueta
+media_scores <- mean(silueta_scores[, 3])
+
+# Mostramos la media resultado
+media_scores
+```
+
+La media de los coeficientes de silueta es un valor muy próximo a 0. Esto indica que los puntos están muy cerca de las fronteras con otros clusters, sugiriendo que no existe una diferenciación significativa entre los clusters. En otras palabras, los clusters no están bien separados y la calidad del clustering es moderada.
+
+Ahora vamos a graficar el análisis de silueta, para tener una visión más detallada de cómo están dispuestos los puntos en los clusters utilizando el modelo.
+
+```{r, echo = TRUE}
+# Creamos un dataframe con los clusters y sus coeficientes de silueta
+silueta_df <- data.frame(cluster = silueta_scores[, 1], sil_width = silueta_scores[, 3])
+
+# Graficamos el resultado obtenido en un diagrama de cajas
+ggplot(silueta_df, aes(x = factor(cluster), y = sil_width)) +
+  geom_boxplot() +
+  labs(title = "Coeficientes de Silueta por Cluster",
+       x = "Cluster",
+       y = "Ancho de Silueta") +
+  theme_minimal()
+```
+
+-   **Cluster 1**:
+
+    -   El ancho de silueta para el cluster 1 varía aproximadamente de -0.2 a 0.4.
+
+    -   La mediana está por encima de 0, indicando una agrupación razonablemente buena en promedio.
+
+    -   Sin embargo, hay varios valores negativos, lo que sugiere que algunos puntos en este cluster podrían estar mal agrupados.
+
+    **Cluster 2**:
+
+    -   El ancho de silueta para el cluster 2 varía aproximadamente de 0 a 0.4.
+
+    -   La mediana está alrededor de 0.3, indicando una mejor agrupación en promedio en comparación con el cluster 1.
+
+    -   Hay menos valores negativos, lo que sugiere que la mayoría de los puntos en este cluster están bien agrupados.
+
+    **Cluster 3**:
+
+    -   El ancho de silueta para el cluster 3 varía aproximadamente de -0.1 a 0.4.
+
+    -   La mediana está alrededor de 0.2, indicando una agrupación aceptable en promedio.
+
+    -   Hay algunos valores negativos, pero menos que en el cluster 1, lo que sugiere que algunos puntos podrían estar mal agrupados.
+
+    **Cluster 4**:
+
+    -   El ancho de silueta para el cluster 4 varía aproximadamente de -0.1 a 0.4, pero con una mayor variabilidad hacia los valores más altos.
+
+    -   La mediana está alrededor de 0.35, lo que indica la mejor agrupación en promedio entre los 4 clusters.
+
+    -   La dispersión en los valores es mayor, pero hay menos valores negativos, sugiriendo que la mayoría de los puntos están bien agrupados y algunos están excepcionalmente bien agrupados.
+
+## Conclusion EUCLIDIANA:
+
+-   **Cohesión Moderada del Modelo**:
+
+    -   La media de los coeficientes de silueta indica que, en general, los puntos están razonablemente bien agrupados, pero no de manera óptima. Un coeficiente de silueta cercano a 0.2 sugiere una cohesión moderada dentro de los clusters y superposición entre los clusters.
+
+-   **Cluster 4 y Cluster 2 Son Relativamente Fuertes**:
+
+    -   Los clusters 4 y 2 tienen los coeficientes de silueta más altos, lo que indica que los puntos dentro de estos clusters están mejor agrupados y son más homogéneos en comparación con los otros clusters. Estos clusters contribuyen positivamente a la media de los coeficientes de silueta del modelo.
+
+-   **Cluster 1 y Cluster 3 Tienen Problemas de Agrupamiento**:
+
+    -   Cluster 1 tiene una mediana de silueta más baja y varios valores negativos, lo que sugiere que algunos puntos en este cluster están mal agrupados. Cluster 3, aunque mejor que el cluster 1, también muestra algunos valores negativos, indicando una posible mezcla o solapamiento con otros clusters.
+
+    -   La presencia de valores negativos en los coeficientes de silueta de estos clusters sugiere que algunos puntos podrían estar más cerca de los centros de otros clusters que del centro de su propio cluster.
+
+------------------------------------------------------------------------
+
+## Generacion de modelo mediante distancia Manhattan
+
+Vamos a volver a trabajar con el dataframe generado anteriormente, pero en este caso vamos a utilizar una distancia distinta a la Euclidiana para determinar los clusters, en este caso vamos a utilizar la distancia de Manhattan, esta distancia se calcula de la siguiente forma:
+
+$$
+\sum^n_{i=1}|a_i-b_i|
+$$
+
+Donde como se puede observar se calcula a partir de la diferencia de cada uno de los puntos de cada vector en valor absoluto y el sumatorio de todos estos.
+
+Para empezar a emplear el modelo de clustering con las distancias de Manhattan, debemos como en el anterior modelo, establecer un numero de centroides para el modelo. Por ello volveremos a utilizar el grafico de codo, para asi establecer cual es el mejor numero de centroides para este.
+
+```{r, echo = TRUE, message = FALSE, warning = FALSE}
+# Definimos el rango de las variables
+centros <- 1:6
+
+# Inicializamos un vector para almacenar suma de las distancias cuadradas
+wss <- numeric(length(centros))
+
+# Iteramos sobre el rango para calcular wss por centro
+for (k in centros) {
+  set.seed(123)
+  clara_man <- clara(data, k, metric="manhattan", samples=100)
+  wss[k] <- sum(clara_man$objective)
+}
+
+# Creamos df relacionando numero de centros a su wss
+codo <- data.frame(k = centros, wss = wss)
+
+# Graficamos para cada valor de los medoids
+ggplot(codo, aes(x = k, y = wss)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +
+  ggtitle("Método del Codo") +
+  xlab("Número de Clusters (k)") +
+  ylab("Suma Distancias Cuadradas Dentro de los Clusters")
+```
+
+En el gráfico del método del codo, podemos observar la suma de distancias cuadradas dentro de los clusters (WSS) frente al número de clusters (k).
+
+-   **Observaciones**:
+
+    -   Al aumentar el número de clusters, la WSS disminuye, lo cual como es lógico, ya que más clusters tienden a agrupar los datos de manera más precisa.
+
+    -   Podemos ver que la disminución más notable de la WSS ocurre entre clusters k = 1 y k = 2.
+
+    -   A partir de k = 4 clusters, la tasa de disminución de la WSS se vuelve más gradual, indicando que añadir más clusters no mejora significativamente la compactación de los registros.
+
+Dado que el gráfico muestra una inflexión notable en k = 4, este es el punto donde se forma un "codo". Esto sugiere que 4 es el número óptimo de clusters para el modelo.
+
+```{r, echo = TRUE}
+# Establecemos la semilla de aleatoriedad
+set.seed(123)
+
+# Construimos el modelo kmeans, 4 centroides, 25 iteraciones aleatorias
+clara_man <- clara(data, 4, metric="manhattan", samples = 100)
+```
+
+Para evaluar la calidad del modelo construido con CLARA, utilizaremos el análisis de silueta. La silueta nos permitirá ver qué tan bien se agrupan los puntos dentro de cada cluster y nos dará una indicación de la separación entre los clusters. Calcularemos los coeficientes de silueta y observaremos su distribución para verificar la calidad del clustering.
+
+```{r, echo = TRUE}
+# Calculamos los coeficientes de silueta de los puntos en sus clusters
+silueta_scores <- silhouette(clara_man$cluster, dist(data))
+
+# Hacemos una media de los coeficientes de silueta
+media_scores <- mean(silueta_scores[, 3])
+
+# Mostramos la media resultado
+media_scores
+```
+
+La media de los coeficientes de silueta del modelo creado es 0.1654702. Este valor indica que, en promedio, los puntos están algo cerca de las fronteras con otros clusters, lo que sugiere que no existe una diferenciación significativa entre los clusters. En otras palabras, los clusters no están bien separados y la calidad del clustering es moderada.
+
+Para obtener una visión más detallada de cómo están dispuestos los puntos dentro de los clusters, vamos a realizar un gráfico de cajas (boxplot) de los coeficientes de silueta. Este gráfico nos permitirá observar la distribución de los coeficientes de silueta dentro de cada cluster, identificar clusters problemáticos y visualizar los puntos que están mal agrupados.
+
+```{r, echo = TRUE}
+# Creamos un dataframe con los clusters y sus coeficientes de silueta
+silueta_df <- data.frame(cluster = silueta_scores[, 1], sil_width = silueta_scores[, 3])
+
+# Graficamos el resultado obtenido en un diagrama de cajas
+ggplot(silueta_df, aes(x = factor(cluster), y = sil_width)) +
+  geom_boxplot() +
+  labs(title = "Coeficientes de Silueta por Cluster",
+       x = "Cluster",
+       y = "Ancho de Silueta") +
+  theme_minimal()
+```
+
+**Cluster 1**:
+
+-   El ancho de silueta para el cluster 1 varía aproximadamente de -0.2 a 0.4.
+
+-   La mediana está por encima de 0.2, indicando una agrupación razonablemente buena en promedio.
+
+-   Sin embargo, hay algunos valores negativos, lo que sugiere que algunos puntos en este cluster podrían estar mal agrupados.
+
+**Cluster 2**:
+
+-   El ancho de silueta para el cluster 2 varía aproximadamente de -0.2 a 0.3.
+
+-   La mediana está alrededor de 0.1, indicando una agrupación moderada en promedio.
+
+-   Hay varios valores negativos, lo que sugiere que una cantidad significativa de puntos en este cluster podrían estar mal agrupados.
+
+**Cluster 3**:
+
+-   El ancho de silueta para el cluster 3 varía aproximadamente de -0.3 a 0.4.
+
+-   La mediana está alrededor de 0.2, indicando una agrupación aceptable en promedio.
+
+-   Hay algunos valores negativos, pero menos que en el cluster 2, lo que sugiere que algunos puntos podrían estar mal agrupados, pero no tantos.
+
+**Cluster 4**:
+
+-   El ancho de silueta para el cluster 4 varía aproximadamente de -0.3 a 0.4.
+
+-   La mediana está alrededor de 0.15, lo que indica una agrupación moderada en promedio.
+
+-   La dispersión en los valores es significativa, y hay varios valores negativos, sugiriendo que una cantidad considerable de puntos están mal agrupados.
+
+## Conclusion MANHATTAN:
+
+-   **Cohesión Moderada del Modelo**:
+
+    -   La media de los coeficientes de silueta (0.1654702) indica que, en general, los puntos están cerca de las fronteras con otros clusters, lo que sugiere una diferenciación moderada entre los clusters. Esto significa que los clusters no están claramente separados y la calidad del clustering es moderada.
+
+-   **Clusters con Mejor Cohesión**:
+
+    -   **Cluster 1** muestra una cohesión razonablemente buena en promedio, con la mediana más alta entre los clusters.
+
+    -   **Cluster 3** también tiene una cohesión aceptable, aunque con algunos puntos mal agrupados.
+
+-   **Clusters con Problemas de Agrupamiento**:
+
+    -   **Cluster 2** y **Cluster 4** tienen varias observaciones con coeficientes de silueta negativos, lo que sugiere problemas de agrupamiento y puntos mal asignados.
+
+## Conclusion entre distancias Euclidiana y Manhattan:
+
+-   **Cohesión General**:
+
+    -   Ambos modelos muestran una cohesión moderada, con medias de silueta cercanas a 0.2.
+
+    -   El modelo con distancia euclidiana presenta una cohesión ligeramente mejor en promedio, con menos puntos mal agrupados.
+
+-   **Clusters Individuales**:
+
+    -   **Cluster 1** y **Cluster 2**: Ambos modelos muestran resultados similares, pero el modelo euclidiano tiene una dispersión menor en los valores negativos.
+
+    -   **Cluster 3**: El modelo euclidiano muestra menos puntos mal agrupados en comparación con el modelo de distancia de Manhattan.
+
+    -   **Cluster 4**: Ambos modelos muestran una cohesión moderada, pero el modelo euclidiano presenta una dispersión ligeramente menor.
+
+-   **Distribución de Coeficientes de Silueta**:
+
+    -   El modelo euclidiano tiene menos valores negativos en los coeficientes de silueta, indicando que los puntos están mejor agrupados y hay menos superposición entre los clusters.
+
+    -   El modelo Manhattan muestra una mayor dispersión y más puntos mal agrupados, especialmente en los clusters 2 y 3.
+
+------------------------------------------------------------------------
+
+## Generacion de modelos mediante algoritmo DBSCAN y OPTICS
+
+## DBSCAN:
+
+En primer lugar, vamos a aplicar el modelo de DBSCAN (Density-Based Spatial Clustering of Applications with Noise), un método de clustering basado en la densidad de los grupos de puntos en el espacio de datos. Mediante el parámetro `eps`, podemos establecer la distancia máxima entre dos puntos para que sean considerados vecinos, y con el parámetro `minPts`, podemos determinar la cantidad de puntos requeridos para formar una región densa (cluster).
+
+Para determinar cuáles son las mejores distancias entre los puntos (`eps`), vamos a recurrir a un gráfico donde representaremos las distancias al k-ésimo vecino más cercano (gráfico de codo). Para ello, primero estableceremos un rango de valores para `minPts`, comenzando con el número de dimensiones del dataframe (variables) y aumentando hasta un mínimo de 10 puntos. Por lo general, para establecer el valor de `minPts`, usamos el número de variables más uno, pero vamos a probar con distintos valores.
+
+```{r, echo = TRUE}
+# Establecemos vector de posibles minimos de puntos
+minPts <- seq(6, 10, by = 1)
+
+# Iteramos sobre los posibles valores del minimo de puntos para cluster
+for (i in minPts){
+  k <- i # Minimo de puntos para cluster
+  kNNdist_plot <- kNNdistplot(data, k = k) # Grafico de representacion de distancias
+  kNNdist_plot
+}
+```
+
+Como podemos observar a partir de los gráficos para cada valor de `minPts`, tenemos un patrón aproximado donde el codo que indica la distancia recomendada para cada uno de los puntos es de 1. Por lo tanto, usaremos esta distancia para construir nuestros modelo de DBSCAN.
+
+```{r, echo = TRUE}
+# Creamos un dataframe de prueba para los clsuters de DBSCAN
+data_db <- data
+data_db <- as.data.frame(data_db)
+
+# Creamos el modelo DBSCAN
+dbscan_result <- dbscan(data_db, eps = 1, minPts = 7)
+
+# Añadimos al dataframe los clusters de DBSCAN
+data_db$cluster <- dbscan_result$cluster
+
+# Calculamos los coeficientes de silueta de las variables con sus clusters
+silhouette_scores <- silhouette(data_db$cluster, dist(data_db[, 1:6]))
+
+# Visualizar el gráfico de silueta
+fviz_silhouette(silhouette_scores)
+```
+
+Como podemos observar a partir del gráfico, hemos obtenido un número de clusters muy elevado, además de un valor de silueta muy pequeño, próximo a 0. Esto indica que el modelo obtenido con los parámetros de eps = 1 y minPts = 7 no es adecuado para nuestros datos. Por lo tanto, realizaremos un análisis iterativo para determinar los mejores valores de estos parámetros para nuestro modelo.
+
+En este análisis, estableceremos un vector para eps que oscile de 1.5 a 2, incrementándose en 0.1 en cada iteración. Para minPts, probaremos valores de 6 a 10. Para reducir la carga de trabajo, estableceremos un máximo de 8 clusters antes de calcular la silueta de estos. Los valores obtenidos se cargarán en un dataset y seleccionaremos aquel con el mejor valor de silueta para establecer el modelo de DBSCAN.
+
+```{r, echo = TRUE}
+# Generamos secuencias de valores eps y minPts
+minPts <- seq(6, 10, by = 1)
+eps <- seq(1.5, 2, by = 0.1)
+
+# Creamos un dataframe para almacenar valores
+resultados <- data.frame(eps = numeric(), minPts = numeric(), avg_silhouette = numeric(), num_clusters = numeric(), stringsAsFactors = FALSE)
+
+# Iteramos sobre los valores para comprobar los resultados de dbscan
+for (i in minPts){
+  for (j in eps){
+    data_db <- as.data.frame(data)
+    
+    # Creamos el DBSCAN
+    dbscan_result <- dbscan(data_db, eps = j, minPts = i)
+    
+    
+    # Añadimos los clusters
+    data_db$cluster <- dbscan_result$cluster
+    
+    
+    # Calculamos numero de clusters
+    clusters <- length(unique(dbscan_result$cluster))-1
+    
+    # Añadimos condicion para establecer minimo de clusters
+    if (clusters >= 9 || clusters < 2){
+      next
+    } else{
+      # Mostramos si se ha añade un nuevo valor al dataframe
+      cat("Se ha añadido un nuevo valor eps =", j, "y para minPts =", i, "\n")
+      
+      
+      # Calculamos las siluetas
+      silhouette_scores <- silhouette(data_db$cluster, dist(data_db[, 1:6]))
+      avg_silhouette <- mean(silhouette_scores[, 3])
+    
+   
+    
+      # Cargamos en dataframe
+      resultados <- rbind(resultados, data.frame(eps = j, minPts = i, avg_silhouette = avg_silhouette, num_clusters = clusters))
+      
+    }
+  }
+}
+#Imprimimos el final de la iteracion
+print("Terminada la iteracion!")
+```
+
+Una vez construido el dataframe extraemos el valor que tiene el maximo valor en cuanto a la media de los coeficientes de siluetas y observamos aquellos valores para los parametros eps y minPts, despues de esto volvemos a graficar las siluetas.
+
+```{r, echo = TRUE}
+resultados[resultados$avg_silhouette == max(resultados$avg_silhouette), ]
+```
+
+Como podemos ver los valores para los que obtenemos el mejor valor de media de los coeficientes de silueta es donde eps = 2 y minPts = 7.
+
+```{r, echo = TRUE}
+# Creamos los dataframes de pruebas
+data_db <- as.data.frame(data)
+    
+# Creamos el DBSCAN
+dbscan_result <- dbscan(data_db, eps = 2, minPts = 7)
+    
+    
+# Añadimos los clusters al dataframe
+data_db$cluster <- dbscan_result$cluster
+
+# Calculamos las siluetas
+silhouette_scores <- silhouette(data_db$cluster, dist(data_db[, 1:6]))
+avg_silhouette <- mean(silhouette_scores[, 3])
+
+# Mostramos las graficas de las siluetas
+fviz_silhouette(silhouette_scores)
+```
+
+Podemos indicar sobre el grafico lo siguiente sobre el modelo:
+
+-   **Calidad del Agrupamiento:** El valor promedio de la anchura de la silueta es 0.72, lo cual es bastante alto y sugiere que los clústeres obtenidos son bastante coherentes.
+
+-   **Distribución de los Clústeres:**
+
+    -   Como podemos ver el cluster numero 1 es el dominante con respecto al resto de clusters, donde este tiene la mayor cantidad de puntos.
+
+    -   Los otros clústeres (0, 2 y 3) tienen muchos menos puntos. Estos clusters pueden contener un numero tan pequeño de registros debido a que pueden estar conteniendo valores outlier del dataset.
+
+-   **Cohesión de los Clústeres:** Los puntos en el clúster 1 tienen valores de silueta consistentemente altos, lo que indica una fuerte cohesión interna y una buena separación de otros clústeres.
+
+-   **Posibles Anomalías:** El clúster 0 (en marrón) y los clústeres con menos puntos (2 y 3) tienen algunos puntos con valores de silueta negativos o cercanos a cero, lo que nos indica que estos puntos están en el borde entre dos clústeres o podrían ser puntos atípicos (puntos de ruido).
+
+Tambien podemos observar como otra medida de calidad del modelo creado, la proporcion de valores de ruido que ha captado esto, ya que si se tratase de un valor muy elevado, esto indicaria que el modelo no es correcto.
+
+```{r, echo = TRUE}
+# Comprobamos el numero de registros de ruido respecto al total de registros
+puntos_ruido <- (sum(data_db$cluster == 0))*100 / nrow(data_db)
+puntos_ruido
+```
+
+Como podemos ver, el porcentaje de valores que han sido considerados de ruido es muy bajo respecto al total de registros del dataframe, donde tenemos un 0.017% de valores considerados de ruido. Tambien vamos a visualizar ya que en el grafico hemos podido ver que el cluster numero 1 contiene la mayoria de los puntos, vamos a ver los porcentajes que contiene de registros cada cluster.
+
+## Conclusion DBSCAN:
+
+-   **Distribución Dominante de un Solo Clúster:** El clúster 1 contiene el 99.91373% de los puntos, lo cual indica que la mayoría de los datos están agrupados en un solo clúster. Esto puede ser debido a que los datos tienen una gran densidad en una región específica y que DBSCAN ha identificado esta región como un clúster principal.
+
+-   **Pequeños Clústeres Secundarios:** Los clústeres 2 y 3 contienen un porcentaje muy pequeño de puntos, 0.02516175% y 0.04313444% respectivamente. Estos clústeres representan áreas de menor densidad dentro del conjunto de datos y probablemente están en los bordes del clúster principal o representan patrones de datos diferentes pero menos significativos.
+
+-   **Puntos de Ruido:** El modelo ha identificado un 0.01797268% de puntos como ruido. Este porcentaje es muy bajo, lo que indica que la mayoría de los puntos de datos han sido asignados a un clúster, y muy pocos se consideran anómalos o fuera de la estructura de densidad identificada.
+
+-   **Calidad del Agrupamiento:** El promedio de la anchura de la silueta es 0.72, lo que sugiere una buena calidad del agrupamiento. La mayoría de los puntos tienen una buena cohesión dentro de sus clústeres y están bien separados de los puntos en otros clústeres. Sin embargo, dado que casi todos los puntos están en un solo clúster, este alto valor de silueta podría estar influenciado por la gran cantidad de puntos en el clúster dominante.
+
+**Conclusión General:** El modelo DBSCAN ha logrado identificar un clúster principal muy denso que contiene la gran mayoría de los puntos. Hay unos pocos clústeres pequeños adicionales que contienen una fracción minúscula de los puntos, y una pequeña cantidad de puntos se considera ruido. El alto valor promedio de la silueta indica que el agrupamiento es coherente, pero la dominancia de un solo clúster sugiere que los datos tienen una densidad uniforme en gran medida. Lo que no nos arroja informacion acerca de caracteristicas internas dentro de los registros, por lo que no podemos agrupar registros para estudiar las caracteristicas de cada uno.
+
+## OPTICS:
+
+Ahora vamos a emplear el algoritmo OPTICS para la construcción de los clusters. Vamos a reutilizar los valores empleados en el modelo DBSCAN para los parámetros eps y minPts, ya que son los que nos reflejaban el mejor valor de media de los coeficientes de silueta. Por lo tanto, crearemos el modelo y posteriormente lo graficaremos para observar los valores a nivel de media de coeficientes de silueta y la construcción de los clusters, para ver cómo se forman.
+
+```{r, echo = TRUE}
+# Creamos los dataframes de pruebas
+data_op <- as.data.frame(data)
+    
+# Creamos el modelo OPTICS
+optics_result <- optics(data_op, eps = 2, minPts = 7)
+    
+# Extraemos los clusters mediante la funcion extractDBSCAN 
+clusters <- extractDBSCAN(optics_result, eps_cl = 2)
+
+# Añadimos los clusters al dataframe
+data_op$cluster <- clusters$cluster
+
+
+# Calculamos las siluetas
+silhouette_scores <- silhouette(data_op$cluster, dist(data_op[, 1:6]))
+avg_silhouette <- mean(silhouette_scores[, 3])
+
+# Mostramos las graficas de las siluetas
+fviz_silhouette(silhouette_scores)
+```
+
+Como podemos ver, se han generado tres clústeres, de los cuales el primero vuelve a contener la mayoría de los datos. También podemos observar que el clúster 0, que es el que contiene los registros de ruido, es muy pequeño, pero esto puede deberse a que la mayoría de los registros, como hemos indicado anteriormente, pueden estar contenidos en un solo clúster.
+
+```{r, echo = TRUE}
+# Comprobamos el numero de registros de ruido respecto al total de registros
+puntos_ruido <- (sum(data_op$cluster == 0))*100 / nrow(data_db)
+puntos_ruido
+```
+
+Podemos observar que la cantidad de registros considerados ruido es muy baja; sin embargo, es un poco más alta que la obtenida con DBSCAN. También podemos ver que la media de los coeficientes de silueta es un poco mayor para este modelo, pero apenas se aprecian mejoras en el modelado.
+
+Por lo tanto, el nuevo modelo creado con OPTICS no representa ninguna mejora aparente.
+
+------------------------------------------------------------------------
+
+## Seleccion de muestras de testing y training
+
+```{r, echo = TRUE}
+# Establecemos el data escalado
+data <- as.data.frame(scale(df))
+
+# Seleccionamos el dataframe con las variables predictoras
+x <- data %>% select(pais, año, genero, numero_suicidios, poblacion, PIB, PIB_per_capita, generacion)
+
+# Establecemos variable con el campo objetivo
+y <- data %>% select(ratio_suicidios_100k)
+
+# Dividimos los conjuntos en train y test
+set.seed(123)
+train_index <- sample(seq_len(nrow(data)), size = 0.8*nrow(data))
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+```
+
+Debido a que tenemos un dataset bastante grande en volumen, con 27,820 registros y 9 variables (excluyendo la variable objetivo), nos interesa tener un conjunto de entrenamiento amplio que pueda procesar toda la información por ello hemos cogido un 80% para el dataset de entrenamiento. Esto nos permitirá tener un modelo de mayor calidad. Por otro lado, un conjunto más pequeño de prueba es suficiente para evaluar el rendimiento del modelo, ya que podemos realizar las mismas pruebas con una muestra representativa.
+
+------------------------------------------------------------------------
+
+## Generacion de modelo ANOVA
+
+Dado que vamos a utilizar el modelo para establecer el valor numérico de la variable ratio_suicides_100k, que es continua, usaremos el algoritmo ANOVA, que es un modelo de regresión, ya que no vamos a utilizar un modelo de clasificación como explicamos anteriormente.
+
+```{r, echo = TRUE}
+# Construimos el modelo
+modelo <- rpart(ratio_suicidios_100k ~ pais + año + genero + edad + numero_suicidios + poblacion + PIB + PIB_per_capita + generacion, 
+                data = train_data, 
+                method = "anova")
+
+# Visualizamos las reglas
+printcp(modelo)
+```
+
+El árbol de regresión construido muestra que las variables `edad`, `género`, `numero_suicidios` y `población` son las más importantes para predecir el ratio de suicidios. A medida que se agregan divisiones al árbol, el error relativo disminuye, pero debemos tener cuidado con el sobreajuste. Realizar una poda puede ayudarnos a mantener un equilibrio entre la precisión del modelo y su capacidad de generalización a nuevos datos. El error que obtenemos en esta variable es de 1.007, siendo un valor de error relativamente pequeño para la variable objetivo.
+
+```{r, echo = TRUE, fig.width=12, fig.height=8}
+# Extracción de reglas en texto
+rpart.plot(modelo)
+```
+
+#### Estructura del Árbol
+
+1.  **Nodo Raíz**:
+
+    -   En este caso, la división inicial se basa en `numero_suicidios` (el número de suicidios).
+
+2.  **Divisiones Principales**:
+
+    -   A partir del nodo raíz, el árbol se divide en varias ramas basadas en diferentes variables predictoras, incluyendo `numero_suicidios`, `poblacion`, `genero`, y `edad`.
+
+#### Análisis de las Reglas Generadas
+
+Vamos a describir 2 de las primas reglas que podemos visualizar en el gráfico:
+
+-   **Regla 1**:
+
+    -   Si `numero_suicidios` ≤ 0.21 y `poblacion` ≤ 0.46, entonces el ratio de suicidios es bajo (valor predicho en el nodo hoja).
+
+-   **Regla 2**:
+
+    -   Si `numero_suicidios` \> 0.21 y `genero` = "masculino" y `poblacion` \> 0.12, entonces el ratio de suicidios es medio o alto, dependiendo de otras condiciones adicionales.
+
+Al ser una variable continua, no podemos construir una matriz de confusion como tal ya que no tenemos variable categoricas, por lo que para medir la calidad del modelo, lo que haremos sera utilizar las siguientes variables:
+
+-   **MSE (Mean Squared Error)**: Mide el promedio de los errores al cuadrado entre las predicciones y los valores reales.
+
+-   **RMSE (Root Mean Squared Error)**: La raíz cuadrada del MSE, proporciona una medida del error en las mismas unidades que la variable objetivo.
+
+-   **MAE (Mean Absolute Error)**: Mide el promedio de los errores absolutos entre las predicciones y los valores reales.
+
+-   **R2 (R-squared)**: El coeficiente de determinación, mide la proporción de la varianza en la variable objetivo que es explicada por el modelo.
+
+```{r, echo = TRUE}
+# Predecir en el conjunto de prueba
+predicciones <- predict(modelo, test_data)
+
+# Calcular métricas de evaluación
+mse <- mean((predicciones - test_data$ratio_suicidios_100k)^2)
+rmse <- sqrt(mse)
+mae <- mean(abs(predicciones - test_data$ratio_suicidios_100k))
+r2 <- 1 - (sum((predicciones - test_data$ratio_suicidios_100k)^2) / sum((mean(train_data$ratio_suicidios_100k) - test_data$ratio_suicidios_100k)^2))
+
+# Mostrar las métricas
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("R2:", r2, "\n")
+```
+
+#### MSE (Mean Squared Error): 0.2850765
+
+El MSE de 0.2850765 sugiere que, en promedio, las diferencias al cuadrado entre las predicciones del modelo y los valores reales son relativamente bajas. Sin embargo, el MSE por sí solo no proporciona una interpretación directa debido a las unidades cuadradas, por lo que también consideramos el RMSE.
+
+#### RMSE (Root Mean Squared Error): 0.5339256
+
+Un RMSE de 0.5339256 nos indica que, en promedio, la predicción del modelo se desvía en aproximadamente 0.53 unidades del valor real, lo que podemos ver que la desviacion puede ser muy elevada en ratios muy bajos.
+
+#### MAE (Mean Absolute Error): 0.3177932
+
+El MAE es el promedio de los errores absolutos entre las predicciones y los valores reales. Un MAE de 0.3177932 indica que, en promedio, las predicciones del modelo se desvían en aproximadamente 0.32 unidades del valor real.
+
+#### R2 (R-squared): 0.7066008
+
+Un R2 de 0.7066008 indica que aproximadamente el 70.66% de la variabilidad en el ratio de suicidios por 100k habitantes puede ser explicado por el modelo. Este es un buen indicador de que el modelo tiene un poder explicativo razonablemente alto.
+
+### Interpretación General
+
+-   **Precisión del Modelo**: Las métricas MSE, RMSE y MAE indican que el modelo tiene un error moderado en sus predicciones. Teniendo en cuenta los valores del campo, donde la media esta situada en 12.82, a partir de los valores indicados podemos determinar que los errores de variacion entre los valores originales y los predichos son razonablemente buenos.
+
+-   **Capacidad Explicativa**: El R2 de 0.7066008 sugiere que el modelo es capaz de explicar una parte significativa de la variabilidad en los datos. Sin embargo, todavía hay un 29.34% de la variabilidad que no está explicada por el modelo, lo que podría ser debido a factores no incluidos en el modelo o a ruido en los datos.
+
+Ahora estableceremos el mismo modelo, pero indicaremos los factores de poda para ver si encontramos una mejora con respecto al modelo original. Para ello, seleccionaremos los valores de error mínimo para los valores de CP del modelo. Una vez seleccionados estos, usaremos la función `prune` para podar las ramas que tienen poca importancia para nuestro estudio. Una vez podadas, realizaremos de nuevo la predicción sobre el conjunto de datos de test y volveremos a mostrar los valores anteriores.
+
+```{r, echo = TRUE}
+# Seleccionar el valor óptimo de CP que minimiza el error de validación cruzada
+optimal_cp <- modelo$cptable[which.min(modelo$cptable[,"xerror"]),"CP"]
+
+# Podar el árbol
+modelo_podado <- prune(modelo, cp = optimal_cp)
+
+# Predecir los valores en el conjunto de prueba usando el árbol podado
+predicciones_podadas <- predict(modelo_podado, test_data)
+
+# Calcular métricas de evaluación para el árbol podado
+mse_podado <- mean((predicciones_podadas - test_data$ratio_suicidios_100k)^2)
+rmse_podado <- sqrt(mse_podado)
+mae_podado <- mean(abs(predicciones_podadas - test_data$ratio_suicidios_100k))
+r2_podado <- 1 - (sum((predicciones_podadas - test_data$ratio_suicidios_100k)^2) / sum((mean(train_data$ratio_suicidios_100k) - test_data$ratio_suicidios_100k)^2))
+
+# Mostrar las métricas para el árbol podado
+cat("MSE (Podado):", mse_podado, "\n")
+cat("RMSE (Podado):", rmse_podado, "\n")
+cat("MAE (Podado):", mae_podado, "\n")
+cat("R2 (Podado):", r2_podado, "\n")
+```
+
+Dado que las métricas son idénticas antes y después de la poda, podemos indicar que el árbol podado tiene un rendimiento predictivo equivalente al del árbol sin podar.
+
+------------------------------------------------------------------------
+
+## Generacion de modelo de regresion lineal multiple
+
+```{r, echo = TRUE}
+# Ajustar el modelo de regresión lineal multiple
+modelo_lm <- lm(ratio_suicidios_100k ~ pais + año + genero + edad + numero_suicidios + poblacion + PIB + PIB_per_capita + generacion, data = train_data)
+
+# Resumen del modelo
+summary(modelo_lm)
+
+# Predecir en los datos de prueba
+predicciones_lm <- predict(modelo_lm, newdata = test_data)
+
+# Calcular el error medio cuadrático (RMSE)
+rmse_lm <- sqrt(mean((predicciones_lm - test_data$ratio_suicidios_100k)^2))
+print(paste("RMSE para Regresión Lineal Múltiple:", rmse_lm))
+```
+
+### Calidad de Clasificación
+
+**Regresión Lineal Múltiple:**
+
+-   Tenemos una visión clara de cómo cada variable afecta el ratio de suicidios, donde podemos ver que las variables: país, año, género, edad, numero_suicidios, población, PIB, generación son las utilizados para elaborar el modelo, podemos observar que en este modelo se usan mas variables que en el visto anteriormente de arbol de decision.
+
+-   Sin embargo, tiene una precisión moderada y a diferencia del modelo anterior explica menor variabilidad de los datos.
+
+### Comparación Exhaustiva
+
+1.  **Precisión del Modelo:**
+
+    -   **Regresión Lineal Múltiple:** RMSE = 0.787
+
+    -   **Árbol de Decisión:** RMSE = 0.534
+
+El árbol de decisión muestra una mejor precisión en comparación con la regresión lineal múltiple, dado su menor RMSE.
+
+2.  **Coeficiente de Determinación (R-cuadrado):**
+
+    -   **Regresión Lineal Múltiple:** R-cuadrado ajustado = 0.3484
+
+    -   **Árbol de Decisión:** R-cuadrado = 0.707
+
+El árbol de decisión también tiene un R-cuadrado significativamente más alto, lo que sugiere que explica mejor la variabilidad de los datos.
+
+3.  **Variables Significativas:**
+
+    -   **Regresión Lineal Múltiple:** Muchas variables son significativas, pero `PIB` y `PIB_per_capita` no lo son.
+
+    -   **Árbol de Decisión:** Utiliza menos variables, pero parece centrarse en las más influyentes (`edad`, `genero`, `numero_suicidios`, `poblacion`).
+
+### Conclusión
+
+El árbol de decisión supera claramente a la regresión lineal múltiple en términos de precisión predictiva (RMSE) y capacidad explicativa (R-cuadrado). Luego, en este caso, para una mejor predicción del ratio de suicidios, el árbol de decisión es la mejor opción.
+
+------------------------------------------------------------------------
+
+## Ejercicio 7
+
+### Se identifica qué posibles limitaciones tienen los datos que has seleccionado para obtener conclusiones con los modelos (supervisado y no supervisado)
+
+### Se identifican posibles riesgos del uso del modelo (mínimo 300 palabras).
+
+#### Posibles Limitaciones de los Datos
+
+**Calidad y Exactitud de los Datos:**
+
+-   **Outliers:** Observamos que existen algunos registros donde los países presentan valores extremos en comparación con la normalización dentro del resto de países. Esto resulta muy complejo para los modelos al intentar establecer grupos diferenciados, generalmente formando un clúster principal que contiene la mayoría de los datos, mientras que los valores outliers se agrupan en hasta 6 clústeres adicionales.
+
+-   **Falta de datos:** Sería necesario contar con un mayor número de registros para la creación de un modelo más robusto, permitiendo a los modelos establecer grupos más diferenciados. Para ello, necesitamos un mayor número de países. Sin embargo, como hemos observado, podría ser un problema la similitud de los registros.
+
+**Actualización y Temporalidad:**
+
+-   **Cambio en las Variables:** Factores como cambios en las políticas de salud mental, la economía o la sociedad pueden alterar la relación entre las variables predictoras y la tasa de suicidios a lo largo del tiempo.
+
+**Heterogeneidad de los Datos:**
+
+-   **Variabilidad Geográfica:** La relación entre las variables predictoras y la tasa de suicidios puede variar significativamente entre diferentes países o regiones, lo que puede dificultar la generalización de los resultados.
+
+-   **Diferencias Culturales y Sociales:** Las diferencias culturales y sociales entre los países pueden afectar la tasa de suicidios y su relación con las variables predictoras, lo que puede no ser capturado adecuadamente por el modelo.
+
+**Limitaciones de Variables:**
+
+-   **Variables Omisivas:** Pueden faltar variables relevantes que influyen en la tasa de suicidios, como factores psicológicos, familiares y acceso a servicios de salud mental.
+
+#### Posibles Riesgos del Uso del Modelo
+
+**Interpretación y Uso de Resultados:**
+
+-   **Simplificación Excesiva:** El modelo construido puede simplificar excesivamente la realidad, omitiendo factores complejos y multidimensionales que influyen en los suicidios. Esto puede llevar a decisiones basadas en una comprensión incompleta de las causas subyacentes. Por ejemplo, variables no contenidas en el dataframe, que comentamos anteriormente, podrían tener un impacto significativo en la variable dependiente/objetivo analizada, así como en el análisis de posibles agrupaciones de los datos.
+
+-   **Malinterpretación:** Los usuarios del modelo pueden malinterpretar los resultados, creyendo que las correlaciones implican causalidad, lo que puede llevar a decisiones políticas o de salud pública ineficaces o perjudiciales. El modelo solo maneja una serie de variables limitadas que no corresponden completamente con la realidad de los sujetos, por lo que no podemos afirmar una causalidad estricta basada en las correlaciones observadas.
+
+**Sesgo en el Modelo:**
+
+-   **Datos Sesgados:** Los datos del modelo provienen de un origen que no es riguroso, como la página de Kaggle, por lo que el conjunto de datos podría estar sesgado. El modelo puede perpetuar o exacerbar estos sesgos. Por ejemplo, si los valores no fueran fieles a la realidad, el modelo no estaría prediciendo un dato veraz y utilizable para implementar medidas con el fin de predecir el ratio de suicidios.
+
+-   **Sesgo de Selección:** Podría ocurrir un sesgo mediante la segmentación del dataset entre prueba y entrenamiento, donde nos veríamos expuestos a perpetuar estos sesgos. Por ejemplo, si ciertos grupos demográficos están subrepresentados en el dataframe de entrenamiento, el modelo puede no predecir adecuadamente para esos grupos.
+
+**Riesgos Éticos:**
+
+-   **Estigmatización:** La malinterpretación que conlleva el uso inapropiado de los resultados del modelo puede llevar a la estigmatización de ciertos grupos o regiones. Por ejemplo, si el modelo identificara a ciertos países o grupos demográficos como de alto riesgo, esto podría llevar a estigmatización y discriminación de los mismos.
+
+-   **Privacidad:** Al tratarse de un dataset público, no presenta un peligro para la privacidad de los datos ya que, además, habla de generalidades por países en lugar de situaciones individuales, por lo que en este caso no estaríamos expuestos a un mal uso.
+
+**Impacto en Políticas Públicas:**
+
+-   **Decisiones Basadas en Modelos:** Las políticas públicas basadas exclusivamente en el resultado del modelo pueden no ser efectivas si no se consideran los contextos locales y las opiniones de expertos en salud mental. Por lo tanto, las decisiones de política basadas en este modelo podrían ser incorrectas o incompletas, lo que podría generar consecuencias adversas.
+
+-   **Recursos Mal Asignados:** El uso del modelo con resultados que no son del todo precisos puede llevar a una asignación ineficiente de recursos en salud pública, dirigiendo fondos y esfuerzos a áreas que no lo necesitan tanto como otras que podrían estar subestimadas.
+
+### Conclusión
+
+En resumen, los modelos supervisados y no supervisados construidos pueden proporcionar valiosos insights y predicciones sobre las tasas de suicidios. Sin embargo, es crucial reconocer y mitigar las limitaciones y riesgos asociados con el uso de estos modelos. Esto incluye asegurar la calidad y la representatividad de los datos, interpretar los resultados con cautela y considerar las implicaciones éticas y prácticas de las decisiones basadas en estos modelos. Por ello, sería necesario investigar más acerca del tema tratado para así obtener variables que establezcan mayores diferencias y mayor relación con la variable dependiente que estamos estudiando, con el fin de establecer un modelo más robusto y representativo de los datos. Independientemente de este modelo, seguirá siendo necesario el apoyo de otros conocimientos y organizaciones para no depender de una única opinión, dada la importancia que tiene la prevención de los suicidios.
+
+------------------------------------------------------------------------
